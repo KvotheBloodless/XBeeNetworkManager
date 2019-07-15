@@ -6,6 +6,7 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.slf4j.Logger;
@@ -80,13 +81,20 @@ public class App {
         }
     }
 
+    public final static String XBEE = "xbee";
+    public final static String XBEE_RATE = "xbeeRate";
+
     private static CommandLine parseCliArguments(String... args) throws ParseException {
 
         final Options options = new Options();
 
-        // final Option a = new Option("k", SIGNALK, true, "ex: --" + SIGNALK + " host:port");
-        // a.setRequired(true);
-        // options.addOption(a);
+        final Option a = new Option("x", XBEE, true, "ex: --" + XBEE + " COM8");
+        a.setRequired(true);
+        options.addOption(a);
+
+        final Option b = new Option("r", XBEE_RATE, true, "ex: --" + XBEE_RATE + " 9600");
+        a.setRequired(true);
+        options.addOption(b);
 
         final CommandLineParser parser = new DefaultParser();
         final HelpFormatter formatter = new HelpFormatter();
