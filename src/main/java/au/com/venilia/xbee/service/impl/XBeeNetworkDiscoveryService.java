@@ -10,7 +10,6 @@ import javax.annotation.PreDestroy;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.TaskScheduler;
 
@@ -24,30 +23,31 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import com.google.common.collect.Sets;
 
-import au.com.venilia.xbee.event.ControllerModuleDetectionEvent;
-import au.com.venilia.xbee.event.SwitchModuleDetectionEvent;
-import au.com.venilia.xbee.service.ModuleDiscoveryService;
+import au.com.venilia.xbee.event.PeerDetectionEvent;
+import au.com.venilia.xbee.service.NetworkCommunicationsService.PeerGroup;
 
-public class ModuleDiscoveryServiceImpl implements ModuleDiscoveryService {
+public class XBeeNetworkDiscoveryService {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ModuleDiscoveryServiceImpl.class);
+    private static final Logger LOG = LoggerFactory.getLogger(XBeeNetworkDiscoveryService.class);
 
-    @Autowired
-    private TaskScheduler scheduler;
+    private final TaskScheduler scheduler;
 
-    @Autowired
-    private ApplicationEventPublisher eventPublisher;
+    private final ApplicationEventPublisher eventPublisher;
 
-    private XBeeDevice localModule;
-
-    private final Multimap<ModuleGroup, RemoteXBeeDevice> remoteModules;
-
+    private XBeeDevice localInstance;
+    private final Multimap<PeerGroup, RemoteXBeeDevice> peers;
     private XBeeNetwork network;
 
-    public ModuleDiscoveryServiceImpl(final String serialDescriptor, final int baudRate) {
+    public XBeeNetworkDiscoveryService(final TaskScheduler scheduler, final ApplicationEventPublisher eventPublisher,
+            final String serialDescriptor, final int baudRate) {
 
-        localModule = new XBeeDevice(serialDescriptor, baudRate);
-        remoteModules = Multimaps.newSetMultimap(Maps.newHashMap(), () -> Sets.newHashSet());
+        LOG.info("Creating module discovery service for serial port {} and baud rate {}", serialDescriptor, baudRate);
+
+        this.scheduler = scheduler;
+        this.eventPublisher = eventPublisher;
+
+        localInstance = new XBeeDevice(serialDescriptor, baudRate);
+        peers = Multimaps.newSetMultimap(Maps.newHashMap(), () -> Sets.newHashSet());
     }
 
     @PostConstruct
@@ -55,9 +55,9 @@ public class ModuleDiscoveryServiceImpl implements ModuleDiscoveryService {
 
         try {
 
-            localModule.open();
+            localInstance.open();
 
-            network = localModule.getNetwork();
+            network = localInstance.getNetwork();
 
             scheduler.scheduleWithFixedDelay(new Runnable() {
 
@@ -104,18 +104,10 @@ public class ModuleDiscoveryServiceImpl implements ModuleDiscoveryService {
 
                     LOG.debug("New module {} found during discovery process; adding to list.", discoveredDevice);
 
-                    final ModuleGroup moduleGroup = ModuleGroup.fromNodeId(discoveredDevice.getNodeID());
-                    remoteModules.put(moduleGroup, discoveredDevice);
+                    final PeerGroup moduleGroup = PeerGroup.fromInstanceIdentifier(discoveredDevice.getNodeID());
+                    peers.put(moduleGroup, discoveredDevice);
 
-                    switch (moduleGroup) {
-                        case CONTROLLERS:
-                            eventPublisher.publishEvent(new ControllerModuleDetectionEvent(discoveredDevice));
-                            break;
-                        case SWITCHES:
-                            eventPublisher.publishEvent(new SwitchModuleDetectionEvent(discoveredDevice));
-                            break;
-                    }
-
+                    eventPublisher.publishEvent(new PeerDetectionEvent(this, discoveredDevice, moduleGroup));
                 } else
                     deviceSeenDuringThisDiscovery.put(discoveredDevice, true);
             }
@@ -135,7 +127,7 @@ public class ModuleDiscoveryServiceImpl implements ModuleDiscoveryService {
 
                             LOG.debug("Module {} was not seen during discovery process; removing from list.", d);
 
-                            remoteModules.remove(ModuleGroup.fromNodeId(d.getNodeID()), d);
+                            peers.remove(PeerGroup.fromInstanceIdentifier(d.getNodeID()), d);
                             network.removeRemoteDevice(d);
                         });
 
@@ -156,22 +148,25 @@ public class ModuleDiscoveryServiceImpl implements ModuleDiscoveryService {
         network.startDiscoveryProcess();
     }
 
-    @Override
-    public XBeeDevice getLocalModule() {
+    public XBeeDevice getLocalInstance() {
 
-        return localModule;
+        return localInstance;
     }
 
-    @Override
-    public Set<RemoteXBeeDevice> getRemoteModules(final ModuleGroup moduleGroup) {
+    public Set<RemoteXBeeDevice> getPeers(final PeerGroup moduleGroup) {
 
-        return (Set<RemoteXBeeDevice>) remoteModules.get(moduleGroup);
+        return (Set<RemoteXBeeDevice>) peers.get(moduleGroup);
+    }
+
+    public Set<RemoteXBeeDevice> getPeers() {
+
+        return (Set<RemoteXBeeDevice>) peers.values();
     }
 
     @PreDestroy
     private void shutdown() {
 
-        if (localModule.isOpen())
-            localModule.close();
+        if (localInstance.isOpen())
+            localInstance.close();
     }
 }

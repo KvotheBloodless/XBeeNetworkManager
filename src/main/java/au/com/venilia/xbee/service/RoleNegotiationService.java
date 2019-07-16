@@ -1,5 +1,6 @@
 package au.com.venilia.xbee.service;
 
+// TODO: This interface and implementation probably belong in a different package
 public interface RoleNegotiationService {
 
     /**
@@ -7,7 +8,7 @@ public interface RoleNegotiationService {
      * 
      * @return the role
      */
-    public Role getRole();
+    public Role currentRole();
 
     public static enum Role {
 
