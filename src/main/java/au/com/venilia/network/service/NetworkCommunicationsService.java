@@ -1,4 +1,4 @@
-package au.com.venilia.xbee.service;
+package au.com.venilia.network.service;
 
 public interface NetworkCommunicationsService {
 

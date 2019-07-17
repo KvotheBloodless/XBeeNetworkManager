@@ -1,10 +1,10 @@
-package au.com.venilia.xbee.event;
+package au.com.venilia.network.event;
 
 import org.springframework.context.ApplicationEvent;
 
 import com.digi.xbee.api.RemoteXBeeDevice;
 
-import au.com.venilia.xbee.service.NetworkCommunicationsService.PeerGroup;
+import au.com.venilia.network.service.NetworkCommunicationsService.PeerGroup;
 
 public class PeerDetectionEvent extends ApplicationEvent {
 

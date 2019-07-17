@@ -9,7 +9,7 @@
     <include resource="logback-appenders.xml" />
 
     <!-- Application logging -->
-    <logger name="au.com.venilia.xbee" level="DEBUG" additivity="false">
+    <logger name="au.com.venilia.xbee" level="TRACE" additivity="false">
         <!-- <appender-ref ref="FILE" /> -->
         <appender-ref ref="CONSOLE" />
     </logger>

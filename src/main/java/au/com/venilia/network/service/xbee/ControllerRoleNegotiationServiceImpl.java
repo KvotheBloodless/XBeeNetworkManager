@@ -1,7 +1,7 @@
-package au.com.venilia.xbee.service.impl;
+package au.com.venilia.network.service.xbee;
 
-import static au.com.venilia.xbee.service.RoleNegotiationService.Role.MASTER;
-import static au.com.venilia.xbee.service.RoleNegotiationService.Role.SLAVE;
+import static au.com.venilia.network.service.ControllerRoleNegotiationService.ControllerRole.MASTER;
+import static au.com.venilia.network.service.ControllerRoleNegotiationService.ControllerRole.SLAVE;
 
 import java.nio.ByteBuffer;
 import java.util.Comparator;
@@ -16,21 +16,21 @@ import com.digi.xbee.api.AbstractXBeeDevice;
 import com.digi.xbee.api.exceptions.XBeeException;
 import com.google.common.collect.Lists;
 
-import au.com.venilia.xbee.event.LocalRoleChangeEvent;
-import au.com.venilia.xbee.event.PeerDetectionEvent;
-import au.com.venilia.xbee.service.RoleNegotiationService;
+import au.com.venilia.network.event.LocalRoleChangeEvent;
+import au.com.venilia.network.event.PeerDetectionEvent;
+import au.com.venilia.network.service.ControllerRoleNegotiationService;
 
-public class RoleNegotiationServiceImpl implements RoleNegotiationService {
+public class ControllerRoleNegotiationServiceImpl implements ControllerRoleNegotiationService {
 
-    private static final Logger LOG = LoggerFactory.getLogger(RoleNegotiationServiceImpl.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ControllerRoleNegotiationServiceImpl.class);
 
     private final ApplicationEventPublisher eventPublisher;
 
     private final XBeeNetworkDiscoveryService xBeeNetworkDiscoveryService;
 
-    private Role role = MASTER; // default
+    private ControllerRole role = MASTER; // default
 
-    public RoleNegotiationServiceImpl(final ApplicationEventPublisher eventPublisher,
+    public ControllerRoleNegotiationServiceImpl(final ApplicationEventPublisher eventPublisher,
             final XBeeNetworkDiscoveryService xBeeNetworkDiscoveryService) {
 
         LOG.info("Creating role negotiation service");
@@ -40,7 +40,7 @@ public class RoleNegotiationServiceImpl implements RoleNegotiationService {
     }
 
     @Override
-    public Role currentRole() {
+    public ControllerRole currentRole() {
 
         return role;
     }

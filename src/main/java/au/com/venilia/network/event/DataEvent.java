@@ -1,8 +1,8 @@
-package au.com.venilia.xbee.event;
+package au.com.venilia.network.event;
 
 import org.springframework.context.ApplicationEvent;
 
-import au.com.venilia.xbee.service.NetworkCommunicationsService.PeerGroup;
+import au.com.venilia.network.service.NetworkCommunicationsService.PeerGroup;
 
 public class DataEvent extends ApplicationEvent {
 

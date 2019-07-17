@@ -1,4 +1,4 @@
-package au.com.venilia.xbee.service.impl;
+package au.com.venilia.network.service.xbee;
 
 import java.time.Duration;
 import java.util.Map;
@@ -23,8 +23,8 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import com.google.common.collect.Sets;
 
-import au.com.venilia.xbee.event.PeerDetectionEvent;
-import au.com.venilia.xbee.service.NetworkCommunicationsService.PeerGroup;
+import au.com.venilia.network.event.PeerDetectionEvent;
+import au.com.venilia.network.service.NetworkCommunicationsService.PeerGroup;
 
 public class XBeeNetworkDiscoveryService {
 
@@ -69,10 +69,10 @@ public class XBeeNetworkDiscoveryService {
                         performDiscovery();
                     } catch (final XBeeException e) {
 
-                        e.printStackTrace();
+                        LOG.error("A {} was thrown during discovery - {}", e.getClass().getSimpleName(), e.getMessage(), e);
                     }
                 }
-            }, Duration.ofMinutes(1)); // Run discovery each minute
+            }, Duration.ofSeconds(30)); // Run discovery each minute
         } catch (final XBeeException e) {
 
             LOG.error("An {} was thrown opening connection to local module - {}", e.getClass().getSimpleName(), e.getMessage(), e);
@@ -108,8 +108,12 @@ public class XBeeNetworkDiscoveryService {
                     peers.put(moduleGroup, discoveredDevice);
 
                     eventPublisher.publishEvent(new PeerDetectionEvent(this, discoveredDevice, moduleGroup));
-                } else
+                } else {
+
+                    LOG.debug("Known module {} seen during discovery process", discoveredDevice);
+
                     deviceSeenDuringThisDiscovery.put(discoveredDevice, true);
+                }
             }
 
             @Override

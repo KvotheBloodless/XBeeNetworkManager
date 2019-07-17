@@ -1,4 +1,4 @@
-package au.com.venilia.xbee.service.impl;
+package au.com.venilia.network.service.xbee;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -8,13 +8,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 
 import com.digi.xbee.api.RemoteXBeeDevice;
-import com.digi.xbee.api.exceptions.TimeoutException;
 import com.digi.xbee.api.exceptions.XBeeException;
 import com.digi.xbee.api.listeners.IDataReceiveListener;
 import com.digi.xbee.api.models.XBeeMessage;
 
-import au.com.venilia.xbee.event.DataEvent;
-import au.com.venilia.xbee.service.NetworkCommunicationsService;
+import au.com.venilia.network.event.DataEvent;
+import au.com.venilia.network.service.NetworkCommunicationsService;
 
 public class XBeeNetworkCommunicationsService implements NetworkCommunicationsService, IDataReceiveListener {
 
@@ -33,7 +32,7 @@ public class XBeeNetworkCommunicationsService implements NetworkCommunicationsSe
 
         this.eventPublisher = eventPublisher;
         this.xBeeNetworkDiscoveryService = xBeeNetworkDiscoveryService;
-        
+
         init();
     }
 
@@ -56,18 +55,14 @@ public class XBeeNetworkCommunicationsService implements NetworkCommunicationsSe
 
                             LOG.debug("Sending {} to {}", communication.getData(), communication.getPeer());
                             xBeeNetworkDiscoveryService.getLocalInstance().sendData(communication.getPeer(), communication.getData());
-                        } catch (final TimeoutException e) {
-
-                            // TODO: log and notify discovery service
-                            e.printStackTrace();
                         } catch (final XBeeException e) {
 
-                            // TODO: log and notify discovery service
-                            e.printStackTrace();
+                            LOG.error("A {} was thrown trying to send data package to {} - {}", e.getClass().getSimpleName(),
+                                    communication.getPeer(), e.getMessage(), e);
                         }
                     } catch (final InterruptedException e) {
 
-                        e.printStackTrace();
+                        LOG.error("A {} was thrown - {}", e.getClass().getSimpleName(), e.getMessage(), e);
                     }
             }
         }).start();
@@ -93,7 +88,8 @@ public class XBeeNetworkCommunicationsService implements NetworkCommunicationsSe
     @Override
     public void dataReceived(final XBeeMessage xbeeMessage) {
 
-        eventPublisher.publishEvent(new DataEvent(this, PeerGroup.fromInstanceIdentifier(xbeeMessage.getDevice().getNodeID()), xbeeMessage.getData()));
+        eventPublisher.publishEvent(
+                new DataEvent(this, PeerGroup.fromInstanceIdentifier(xbeeMessage.getDevice().getNodeID()), xbeeMessage.getData()));
     }
 
     private static class Communication {
