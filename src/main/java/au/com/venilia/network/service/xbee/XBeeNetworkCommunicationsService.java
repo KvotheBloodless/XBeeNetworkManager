@@ -28,7 +28,7 @@ public class XBeeNetworkCommunicationsService implements NetworkCommunicationsSe
     public XBeeNetworkCommunicationsService(final ApplicationEventPublisher eventPublisher,
             final XBeeNetworkDiscoveryService xBeeNetworkDiscoveryService) {
 
-        LOG.info("Creating module communications service");
+        LOG.info("Creating network communications service");
 
         this.eventPublisher = eventPublisher;
         this.xBeeNetworkDiscoveryService = xBeeNetworkDiscoveryService;

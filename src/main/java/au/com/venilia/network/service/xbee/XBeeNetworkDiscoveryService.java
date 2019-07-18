@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 
 import org.slf4j.Logger;
@@ -13,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.TaskScheduler;
 
+import com.digi.xbee.api.AbstractXBeeDevice;
 import com.digi.xbee.api.RemoteXBeeDevice;
 import com.digi.xbee.api.XBeeDevice;
 import com.digi.xbee.api.XBeeNetwork;
@@ -25,8 +25,9 @@ import com.google.common.collect.Sets;
 
 import au.com.venilia.network.event.PeerDetectionEvent;
 import au.com.venilia.network.service.NetworkCommunicationsService.PeerGroup;
+import au.com.venilia.network.service.NetworkDiscoveryService;
 
-public class XBeeNetworkDiscoveryService {
+public class XBeeNetworkDiscoveryService implements NetworkDiscoveryService {
 
     private static final Logger LOG = LoggerFactory.getLogger(XBeeNetworkDiscoveryService.class);
 
@@ -34,24 +35,30 @@ public class XBeeNetworkDiscoveryService {
 
     private final ApplicationEventPublisher eventPublisher;
 
+    private final long discoveryTimeoutMillis;
+    private final long discoveryRunDelaySeconds;
+
     private XBeeDevice localInstance;
     private final Multimap<PeerGroup, RemoteXBeeDevice> peers;
     private XBeeNetwork network;
 
     public XBeeNetworkDiscoveryService(final TaskScheduler scheduler, final ApplicationEventPublisher eventPublisher,
-            final String serialDescriptor, final int baudRate) {
+            final String serialDescriptor, final int baudRate, final long discoveryTimeoutMillis, final long discoveryRunDelaySeconds) {
 
-        LOG.info("Creating module discovery service for serial port {} and baud rate {}", serialDescriptor, baudRate);
+        LOG.info("Creating network discovery service for serial port {} and baud rate {}", serialDescriptor, baudRate);
 
         this.scheduler = scheduler;
         this.eventPublisher = eventPublisher;
+        this.discoveryTimeoutMillis = discoveryTimeoutMillis;
+        this.discoveryRunDelaySeconds = discoveryRunDelaySeconds;
 
         localInstance = new XBeeDevice(serialDescriptor, baudRate);
         peers = Multimaps.newSetMultimap(Maps.newHashMap(), () -> Sets.newHashSet());
+
+        init();
     }
 
-    @PostConstruct
-    private void init() throws XBeeException {
+    private void init() {
 
         try {
 
@@ -72,11 +79,11 @@ public class XBeeNetworkDiscoveryService {
                         LOG.error("A {} was thrown during discovery - {}", e.getClass().getSimpleName(), e.getMessage(), e);
                     }
                 }
-            }, Duration.ofSeconds(30)); // Run discovery each minute
+            }, Duration.ofSeconds(discoveryRunDelaySeconds));
         } catch (final XBeeException e) {
 
             LOG.error("An {} was thrown opening connection to local module - {}", e.getClass().getSimpleName(), e.getMessage(), e);
-            throw e;
+            throw new RuntimeException(e);
         }
     }
 
@@ -95,6 +102,8 @@ public class XBeeNetworkDiscoveryService {
         if (discoveryListener != null)
             network.removeDiscoveryListener(discoveryListener);
 
+        network.setDiscoveryTimeout(discoveryTimeoutMillis);
+
         discoveryListener = new IDiscoveryListener() {
 
             @Override
@@ -104,10 +113,10 @@ public class XBeeNetworkDiscoveryService {
 
                     LOG.debug("New module {} found during discovery process; adding to list.", discoveredDevice);
 
-                    final PeerGroup moduleGroup = PeerGroup.fromInstanceIdentifier(discoveredDevice.getNodeID());
-                    peers.put(moduleGroup, discoveredDevice);
+                    final PeerGroup peerGroup = PeerGroup.fromInstanceIdentifier(discoveredDevice.getNodeID());
+                    peers.put(peerGroup, discoveredDevice);
 
-                    eventPublisher.publishEvent(new PeerDetectionEvent(this, discoveredDevice, moduleGroup));
+                    eventPublisher.publishEvent(new PeerDetectionEvent(this, discoveredDevice, peerGroup));
                 } else {
 
                     LOG.debug("Known module {} seen during discovery process", discoveredDevice);
@@ -157,9 +166,9 @@ public class XBeeNetworkDiscoveryService {
         return localInstance;
     }
 
-    public Set<RemoteXBeeDevice> getPeers(final PeerGroup moduleGroup) {
+    public Set<RemoteXBeeDevice> getPeers(final PeerGroup peerGroup) {
 
-        return (Set<RemoteXBeeDevice>) peers.get(moduleGroup);
+        return (Set<RemoteXBeeDevice>) peers.get(peerGroup);
     }
 
     public Set<RemoteXBeeDevice> getPeers() {
@@ -172,5 +181,37 @@ public class XBeeNetworkDiscoveryService {
 
         if (localInstance.isOpen())
             localInstance.close();
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Returns the low significant bits of the XBee module 16 bit address
+     * </p>
+     */
+    @Override
+    public int getLocalInstanceId() {
+
+        return addressToId(localInstance);
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Returns the low significant bits of the XBee module 16 bit address
+     * </p>
+     */
+    @Override
+    public Set<Integer> getPeerIds(final PeerGroup peerGroup) {
+
+        return peers.get(peerGroup)
+                .stream()
+                .map(p -> addressToId(p))
+                .collect(Collectors.toSet());
+    }
+
+    private static int addressToId(final AbstractXBeeDevice device) {
+
+        return device.get16BitAddress().getLsb();
     }
 }

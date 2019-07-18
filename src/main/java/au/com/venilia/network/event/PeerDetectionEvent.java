@@ -10,14 +10,14 @@ public class PeerDetectionEvent extends ApplicationEvent {
 
     private final RemoteXBeeDevice peer;
 
-    private final PeerGroup moduleGroup;
+    private final PeerGroup peerGroup;
 
-    public PeerDetectionEvent(final Object source, final RemoteXBeeDevice peer, final PeerGroup moduleGroup) {
+    public PeerDetectionEvent(final Object source, final RemoteXBeeDevice peer, final PeerGroup peerGroup) {
 
         super(source);
 
         this.peer = peer;
-        this.moduleGroup = moduleGroup;
+        this.peerGroup = peerGroup;
     }
 
     public RemoteXBeeDevice getPeer() {
@@ -25,8 +25,8 @@ public class PeerDetectionEvent extends ApplicationEvent {
         return peer;
     }
 
-    public PeerGroup getModuleGroup() {
+    public PeerGroup getPeerGroup() {
 
-        return moduleGroup;
+        return peerGroup;
     }
 }
