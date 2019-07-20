@@ -83,7 +83,7 @@ public class XBeeNetworkDiscoveryService implements NetworkDiscoveryService {
         } catch (final XBeeException e) {
 
             LOG.error("An {} was thrown opening connection to local module - {}", e.getClass().getSimpleName(), e.getMessage(), e);
-            throw new RuntimeException(e);
+            //throw new RuntimeException(e);
         }
     }
 
