@@ -6,6 +6,8 @@ import java.util.concurrent.LinkedBlockingDeque;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.retry.RetryContext;
+import org.springframework.retry.support.RetryTemplate;
 
 import com.digi.xbee.api.RemoteXBeeDevice;
 import com.digi.xbee.api.exceptions.XBeeException;
@@ -23,15 +25,19 @@ public class XBeeNetworkCommunicationsService implements NetworkCommunicationsSe
 
     private final XBeeNetworkDiscoveryService xBeeNetworkDiscoveryService;
 
+    private final RetryTemplate retryTemplate;
+
     private BlockingQueue<Communication> outgoingQueue;
 
     public XBeeNetworkCommunicationsService(final ApplicationEventPublisher eventPublisher,
-            final XBeeNetworkDiscoveryService xBeeNetworkDiscoveryService) {
+            final XBeeNetworkDiscoveryService xBeeNetworkDiscoveryService,
+            final RetryTemplate retryTemplate) {
 
         LOG.info("Creating network communications service");
 
         this.eventPublisher = eventPublisher;
         this.xBeeNetworkDiscoveryService = xBeeNetworkDiscoveryService;
+        this.retryTemplate = retryTemplate;
 
         init();
     }
@@ -51,15 +57,25 @@ public class XBeeNetworkCommunicationsService implements NetworkCommunicationsSe
 
                         final Communication communication = outgoingQueue.take();
 
-                        try {
+                        LOG.debug("Sending {} to {}", new String(communication.getData()), communication.getPeer());
 
-                            LOG.debug("Sending {} to {}", communication.getData(), communication.getPeer());
-                            xBeeNetworkDiscoveryService.getLocalInstance().sendData(communication.getPeer(), communication.getData());
-                        } catch (final XBeeException e) {
+                        retryTemplate.execute(retryContext -> {
 
-                            LOG.error("A {} was thrown trying to send data package to {} - {}", e.getClass().getSimpleName(),
-                                    communication.getPeer(), e.getMessage(), e);
-                        }
+                            retryContext.setAttribute(RetryContext.NAME,
+                                    String.format("Retry context to send %s to %s", new String(communication.getData()), communication.getPeer()));
+
+                            try {
+                            	
+								xBeeNetworkDiscoveryService.getLocalInstance().sendData(communication.getPeer(),
+										communication.getData());
+
+								return null;
+                            } catch (final XBeeException e) {
+
+                                // If this fails permanently, the logging will be handled by the RetryListener
+                                throw new RuntimeException(e);
+                            }
+                        });
                     } catch (final InterruptedException e) {
 
                         LOG.error("A {} was thrown - {}", e.getClass().getSimpleName(), e.getMessage(), e);
@@ -88,8 +104,8 @@ public class XBeeNetworkCommunicationsService implements NetworkCommunicationsSe
     @Override
     public void dataReceived(final XBeeMessage xbeeMessage) {
 
-        eventPublisher.publishEvent(
-                new DataEvent(this, PeerGroup.fromInstanceIdentifier(xbeeMessage.getDevice().getNodeID()), xbeeMessage.getData()));
+        eventPublisher.publishEvent(new DataEvent(this,
+                PeerGroup.fromInstanceIdentifier(xbeeMessage.getDevice().getNodeID()), xbeeMessage.getData()));
     }
 
     private static class Communication {
