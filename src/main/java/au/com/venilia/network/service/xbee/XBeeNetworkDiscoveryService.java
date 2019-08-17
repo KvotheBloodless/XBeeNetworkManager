@@ -35,7 +35,6 @@ public class XBeeNetworkDiscoveryService implements NetworkDiscoveryService {
 
     private final ApplicationEventPublisher eventPublisher;
 
-    private final long discoveryTimeoutMillis;
     private final long discoveryRunDelaySeconds;
 
     private XBeeDevice localInstance;
@@ -43,13 +42,12 @@ public class XBeeNetworkDiscoveryService implements NetworkDiscoveryService {
     private XBeeNetwork network;
 
     public XBeeNetworkDiscoveryService(final TaskScheduler scheduler, final ApplicationEventPublisher eventPublisher,
-            final String serialDescriptor, final int baudRate, final long discoveryTimeoutMillis, final long discoveryRunDelaySeconds) {
+            final String serialDescriptor, final int baudRate, final long discoveryRunDelaySeconds) {
 
         LOG.info("Creating network discovery service for serial port {} and baud rate {}", serialDescriptor, baudRate);
 
         this.scheduler = scheduler;
         this.eventPublisher = eventPublisher;
-        this.discoveryTimeoutMillis = discoveryTimeoutMillis;
         this.discoveryRunDelaySeconds = discoveryRunDelaySeconds;
 
         localInstance = new XBeeDevice(serialDescriptor, baudRate);
@@ -76,14 +74,16 @@ public class XBeeNetworkDiscoveryService implements NetworkDiscoveryService {
                         performDiscovery();
                     } catch (final XBeeException e) {
 
-                        LOG.error("A {} was thrown during discovery - {}", e.getClass().getSimpleName(), e.getMessage(), e);
+                        LOG.error("A {} was thrown during discovery - {}", e.getClass().getSimpleName(), e.getMessage(),
+                                e);
                     }
                 }
             }, Duration.ofSeconds(discoveryRunDelaySeconds));
         } catch (final XBeeException e) {
 
-            LOG.error("An {} was thrown opening connection to local module - {}", e.getClass().getSimpleName(), e.getMessage(), e);
-            //throw new RuntimeException(e);
+            LOG.error("An {} was thrown opening connection to local module - {}", e.getClass().getSimpleName(),
+                    e.getMessage(), e);
+            // throw new RuntimeException(e);
         }
     }
 
@@ -96,13 +96,12 @@ public class XBeeNetworkDiscoveryService implements NetworkDiscoveryService {
 
         LOG.info("Performing XBee module disovery on network {}", network);
 
-        final Map<RemoteXBeeDevice, Boolean> deviceSeenDuringThisDiscovery =
-                network.getDevices().stream().collect(Collectors.toMap(d -> d, d -> false));
+        final Map<RemoteXBeeDevice, Boolean> deviceSeenDuringThisDiscovery = network.getDevices()
+                .stream()
+                .collect(Collectors.toMap(d -> d, d -> false));
 
         if (discoveryListener != null)
             network.removeDiscoveryListener(discoveryListener);
-
-        network.setDiscoveryTimeout(discoveryTimeoutMillis);
 
         discoveryListener = new IDiscoveryListener() {
 
@@ -129,8 +128,8 @@ public class XBeeNetworkDiscoveryService implements NetworkDiscoveryService {
             public void discoveryFinished(final String error) {
 
                 if (error != null)
-                    throw new RuntimeException(
-                            new XBeeException(String.format("An error occurred during remote XBee module discovery - %s", error)));
+                    throw new RuntimeException(new XBeeException(
+                            String.format("An error occurred during remote XBee module discovery - %s", error)));
 
                 deviceSeenDuringThisDiscovery.entrySet()
                         .stream()
@@ -150,8 +149,8 @@ public class XBeeNetworkDiscoveryService implements NetworkDiscoveryService {
             @Override
             public void discoveryError(final String error) {
 
-                throw new RuntimeException(
-                        new XBeeException(String.format("An error occurred during remote XBee module discovery - %s", error)));
+                throw new RuntimeException(new XBeeException(
+                        String.format("An error occurred during remote XBee module discovery - %s", error)));
             }
         };
 
@@ -204,10 +203,7 @@ public class XBeeNetworkDiscoveryService implements NetworkDiscoveryService {
     @Override
     public Set<Integer> getPeerIds(final PeerGroup peerGroup) {
 
-        return peers.get(peerGroup)
-                .stream()
-                .map(p -> addressToId(p))
-                .collect(Collectors.toSet());
+        return peers.get(peerGroup).stream().map(p -> addressToId(p)).collect(Collectors.toSet());
     }
 
     private static int addressToId(final AbstractXBeeDevice device) {
