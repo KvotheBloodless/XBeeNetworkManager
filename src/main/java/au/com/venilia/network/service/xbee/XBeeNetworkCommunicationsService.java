@@ -6,6 +6,8 @@ import java.util.concurrent.LinkedBlockingDeque;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.retry.RecoveryCallback;
+import org.springframework.retry.RetryCallback;
 import org.springframework.retry.RetryContext;
 import org.springframework.retry.support.RetryTemplate;
 
@@ -19,120 +21,146 @@ import au.com.venilia.network.service.NetworkCommunicationsService;
 
 public class XBeeNetworkCommunicationsService implements NetworkCommunicationsService, IDataReceiveListener {
 
-    private static final Logger LOG = LoggerFactory.getLogger(XBeeNetworkCommunicationsService.class);
+	private static final Logger LOG = LoggerFactory.getLogger(XBeeNetworkCommunicationsService.class);
 
-    private final ApplicationEventPublisher eventPublisher;
+	private final ApplicationEventPublisher eventPublisher;
 
-    private final XBeeNetworkDiscoveryService xBeeNetworkDiscoveryService;
+	private final XBeeNetworkDiscoveryService xBeeNetworkDiscoveryService;
 
-    private final RetryTemplate retryTemplate;
+	private final RetryTemplate retryTemplate;
 
-    private BlockingQueue<Communication> outgoingQueue;
+	private BlockingQueue<Communication> outgoingQueue;
 
-    public XBeeNetworkCommunicationsService(final ApplicationEventPublisher eventPublisher,
-            final XBeeNetworkDiscoveryService xBeeNetworkDiscoveryService,
-            final RetryTemplate retryTemplate) {
+	public XBeeNetworkCommunicationsService(final ApplicationEventPublisher eventPublisher,
+			final XBeeNetworkDiscoveryService xBeeNetworkDiscoveryService, final RetryTemplate retryTemplate) {
 
-        LOG.info("Creating network communications service");
+		LOG.info("Creating network communications service");
 
-        this.eventPublisher = eventPublisher;
-        this.xBeeNetworkDiscoveryService = xBeeNetworkDiscoveryService;
-        this.retryTemplate = retryTemplate;
+		this.eventPublisher = eventPublisher;
+		this.xBeeNetworkDiscoveryService = xBeeNetworkDiscoveryService;
+		this.retryTemplate = retryTemplate;
 
-        init();
-    }
+		init();
+	}
 
-    private void init() {
+	private void init() {
 
-        xBeeNetworkDiscoveryService.getLocalInstance().addDataListener(this);
+		xBeeNetworkDiscoveryService.getLocalInstance().addDataListener(this);
 
-        outgoingQueue = new LinkedBlockingDeque<>();
-        new Thread(new Runnable() {
+		outgoingQueue = new LinkedBlockingDeque<>();
+		new Thread(new Runnable() {
 
-            @Override
-            public void run() {
+			@Override
+			public void run() {
 
-                while (true)
-                    try {
+				while (true)
+					try {
 
-                        final Communication communication = outgoingQueue.take();
+						final Communication communication = outgoingQueue.take();
+						final int sendAttempts = communication.stage();
 
-                        LOG.debug("Sending {} to {}", new String(communication.getData()), communication.getPeer());
+						if (sendAttempts < 100) {
+							LOG.debug("Sending {} to {} - (attempt {})", new String(communication.getData()),
+									communication.getPeer(), sendAttempts);
 
-                        retryTemplate.execute(retryContext -> {
+							retryTemplate.execute(new RetryCallback<Void, RuntimeException>() {
 
-                            retryContext.setAttribute(RetryContext.NAME,
-                                    String.format("Retry context to send %s to %s", new String(communication.getData()), communication.getPeer()));
+								@Override
+								public Void doWithRetry(final RetryContext retryContext) throws RuntimeException {
 
-                            try {
-                            	
-								xBeeNetworkDiscoveryService.getLocalInstance().sendData(communication.getPeer(),
-										communication.getData());
+									retryContext.setAttribute(RetryContext.NAME,
+											String.format("Retry context to send %s to %s",
+													new String(communication.getData()), communication.getPeer()));
 
-								return null;
-                            } catch (final XBeeException e) {
+									try {
 
-                                // If this fails permanently, the logging will be handled by the RetryListener
-                                throw new RuntimeException(e);
-                            }
-                        });
-                    } catch (final InterruptedException e) {
+										xBeeNetworkDiscoveryService.getLocalInstance().sendData(communication.getPeer(),
+												communication.getData());
 
-                        LOG.error("A {} was thrown - {}", e.getClass().getSimpleName(), e.getMessage(), e);
-                    }
-            }
-        }).start();
-    }
+										return null;
+									} catch (final XBeeException e) {
 
-    @Override
-    public void send(final byte[] data) {
+										// If this fails permanently, the logging will be handled by the RetryListener
+										throw new RuntimeException(e);
+									}
+								}
+							}, new RecoveryCallback<Void>() {
 
-        xBeeNetworkDiscoveryService.getPeers().forEach(target -> send(target, data));
-    }
+								@Override
+								public Void recover(final RetryContext context) throws Exception {
 
-    @Override
-    public void send(final PeerGroup peerGroup, final byte[] data) {
+									// It failed, lets just chuck it back on the end of the queue
+									outgoingQueue.put(communication);
+									return null;
+								}
+							});
+						} else
+							LOG.debug("Permanently failed sending {} to {} after {} attempts.",
+									new String(communication.getData()), communication.getPeer(), sendAttempts);
+					} catch (final InterruptedException e) {
 
-        xBeeNetworkDiscoveryService.getPeers(peerGroup).forEach(target -> send(target, data));
-    }
+						LOG.error("A {} was thrown - {}", e.getClass().getSimpleName(), e.getMessage(), e);
+					}
+			}
+		}).start();
+	}
 
-    private void send(final RemoteXBeeDevice target, final byte[] data) {
+	@Override
+	public void send(final byte[] data) {
 
-        outgoingQueue.add(Communication.as(target, data));
-    }
+		xBeeNetworkDiscoveryService.getPeers().forEach(target -> send(target, data));
+	}
 
-    @Override
-    public void dataReceived(final XBeeMessage xbeeMessage) {
+	@Override
+	public void send(final PeerGroup peerGroup, final byte[] data) {
 
-        eventPublisher.publishEvent(new DataEvent(this,
-                PeerGroup.fromInstanceIdentifier(xbeeMessage.getDevice().getNodeID()), xbeeMessage.getData()));
-    }
+		xBeeNetworkDiscoveryService.getPeers(peerGroup).forEach(target -> send(target, data));
+	}
 
-    private static class Communication {
+	private void send(final RemoteXBeeDevice target, final byte[] data) {
 
-        private final RemoteXBeeDevice peer;
+		outgoingQueue.add(Communication.as(target, data));
+	}
 
-        private final byte[] data;
+	@Override
+	public void dataReceived(final XBeeMessage xbeeMessage) {
 
-        protected Communication(final RemoteXBeeDevice target, final byte[] data) {
+		eventPublisher.publishEvent(new DataEvent(this,
+				PeerGroup.fromInstanceIdentifier(xbeeMessage.getDevice().getNodeID()), xbeeMessage.getData()));
+	}
 
-            this.peer = target;
-            this.data = data;
-        }
+	private static class Communication {
 
-        public static Communication as(final RemoteXBeeDevice peer, final byte[] data) {
+		private final RemoteXBeeDevice peer;
 
-            return new Communication(peer, data);
-        }
+		private final byte[] data;
 
-        public RemoteXBeeDevice getPeer() {
+		private int sendAttempts = 0;
 
-            return peer;
-        }
+		protected Communication(final RemoteXBeeDevice target, final byte[] data) {
 
-        public byte[] getData() {
+			this.peer = target;
+			this.data = data;
+		}
 
-            return data;
-        }
-    }
+		public static Communication as(final RemoteXBeeDevice peer, final byte[] data) {
+
+			return new Communication(peer, data);
+		}
+
+		public RemoteXBeeDevice getPeer() {
+
+			return peer;
+		}
+
+		public byte[] getData() {
+
+			return data;
+		}
+
+		public int stage() {
+
+			return ++sendAttempts;
+		}
+	}
 }

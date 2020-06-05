@@ -133,7 +133,7 @@ public class XBeeNetworkDiscoveryService implements NetworkDiscoveryService {
 				deviceSeenDuringThisDiscovery.entrySet().stream().filter(e -> !e.getValue().booleanValue())
 						.map(e -> e.getKey()).forEach(d -> {
 
-							LOG.warn("Module {} was not seen during discovery process", d);
+							LOG.warn("Known module {} was not seen during discovery process", d);
 
 //                            peers.remove(PeerGroup.fromInstanceIdentifier(d.getNodeID()), d);
 //                            network.removeRemoteDevice(d);
